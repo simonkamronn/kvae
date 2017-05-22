@@ -24,7 +24,6 @@ np.random.seed(1337)
 class KalmanVariationalAutoencoder(object):
     """Soft switching linear gaussian state space model
     """
-
     def __init__(self, config, sess):
         self.config = config
 
@@ -90,11 +89,13 @@ class KalmanVariationalAutoencoder(object):
         self.out_gen_det_impute = None
         self.train_summary = None
         self.test_summary = None
-        self.tau_ph = tf.placeholder_with_default(tf.constant(config.gumbel_min, tf.float32), shape=(), name='tau_ph')
-        self.tau = 4
-        self.alpha_logits = None
 
     def encoder(self, x):
+        """ Convolutional variational encoder to encode image into a low-dimensional latent code
+        If config.conv == False, it is a MLP VAE and if config.use_vae == False, it is a normal encoder
+        :param x: sequence of images
+        :return: a, a_mu, a_var
+        """
         with tf.variable_scope('vae/encoder'):
             if self.config.conv:
                 x_flat_conv = tf.reshape(x, (-1, self.d1, self.d2, 1))
@@ -115,7 +116,6 @@ class KalmanVariationalAutoencoder(object):
 
             a_mu = slim.fully_connected(enc_flat, self.config.dim_a, activation_fn=None)
             if self.config.use_vae:
-                # a_var = slim.fully_connected(enc_flat, config.dim_a, activation_fn=tf.nn.softplus)
                 a_var = slim.fully_connected(enc_flat, self.config.dim_a, activation_fn=tf.nn.sigmoid)
                 a_var = self.config.noise_emission * a_var
                 a = simple_sample(a_mu, a_var)
@@ -126,6 +126,11 @@ class KalmanVariationalAutoencoder(object):
         return a_seq, a_mu, a_var
 
     def decoder(self, a_seq):
+        """ Convolutional variational decoder to decode latent code to image reconstruction
+        If config.conv == False, it is a MLP VAE and if config.use_vae == False, it is a normal decoder
+        :param a_seq: latent code
+        :return: x_hat, x_mu, x_var
+        """
         # Create decoder
         if self.config.out_distr == 'bernoulli':
             activation_x_mu = tf.nn.sigmoid
@@ -162,7 +167,7 @@ class KalmanVariationalAutoencoder(object):
         return tf.reshape(x_hat, tf.stack((-1, self.ph_steps, self.d1, self.d2))), x_mu, x_var
 
     def alpha(self, inputs, state=None, u=None, buffer=None, reuse=None, init_buffer=False, name='alpha'):
-        """The mixing vector alpha for mixing transitions in a state space model
+        """The dynamics parameter network alpha for mixing transitions in a state space model
 
         Args:
             inputs: tensor to condition mixing vector on
@@ -177,6 +182,7 @@ class KalmanVariationalAutoencoder(object):
             alpha: mixing vector of dimension (batch size, K)
             state: new state
             u: either inferred u from model or pass-through
+            buffer: FIFO buffer
         """
         # Increase the number of hidden units if we also learn u
         num_units = self.config.alpha_units * 2 if self.config.learn_u else self.config.alpha_units
@@ -187,16 +193,8 @@ class KalmanVariationalAutoencoder(object):
 
         with tf.variable_scope(name, reuse=reuse):
             if self.config.alpha_rnn:
-                # rnn_cell = GRUCell(num_units)
                 rnn_cell = BasicLSTMCell(num_units, reuse=reuse)
                 output, state = rnn_cell(inputs, state)
-
-                if False:
-                    output = slim.repeat(output, self.config.alpha_layers, slim.fully_connected,
-                                           num_units, get_activation_fn(self.config.alpha_activation))
-                    # output = slim.fully_connected(output, num_units,
-                    #                               activation_fn=get_activation_fn(self.config.alpha_activation))
-
             else:
                 # Shift buffer
                 buffer = tf.concat([buffer[:, :, 1:], tf.expand_dims(inputs, 2)], 2)
@@ -205,21 +203,11 @@ class KalmanVariationalAutoencoder(object):
                     self.config.alpha_layers, slim.fully_connected, num_units,
                     get_activation_fn(self.config.alpha_activation), scope='hidden')
 
-            if self.config.alpha_gumbel:
-                logits = slim.fully_connected(output[:, :self.config.alpha_units],
-                                              self.config.K,
-                                              activation_fn=None,
-                                              scope='gumbel_logits')
-                if self.alpha_logits is None:
-                    # TODO: This is a bit of a hack
-                    self.alpha_logits = logits
-                alpha = gumbel_softmax(logits, self.tau_ph)
-            else:
-                # Get Alpha as the first part of the output
-                alpha = slim.fully_connected(output[:, :self.config.alpha_units],
-                                             self.config.K,
-                                             activation_fn=tf.nn.softmax,
-                                             scope='alpha_var')
+            # Get Alpha as the first part of the output
+            alpha = slim.fully_connected(output[:, :self.config.alpha_units],
+                                         self.config.K,
+                                         activation_fn=tf.nn.softmax,
+                                         scope='alpha_var')
 
             if self.config.learn_u:
                 # Get U as the second half of the output
@@ -265,7 +253,6 @@ class KalmanVariationalAutoencoder(object):
 
         # Used only for imputation plots
         filter, _, _, C_filter, _ = self.kf.filter()
-        # smooth_gibbs, A_gibbs, B_gibbs, C_gibbs, alpha_plot_gibbs = self.kf.smooth_gibbs()
 
         # Get a from the prior z
         a_mu_pred = tf.matmul(C, tf.expand_dims(smooth[0], 2), transpose_b=True)
@@ -333,14 +320,6 @@ class KalmanVariationalAutoencoder(object):
         else:
             elbo_tot = self.scale_reconstruction * log_px + elbo_kf - temperature_kf * log_qa
 
-        if self.config.alpha_gumbel:
-            # Get Gumbel kl term
-            alpha_gumbel_kl = tf.reduce_sum(kl_gumbel(self.alpha_logits, 1, self.config.K))
-            tf.summary.scalar('gumbel_kl', alpha_gumbel_kl)
-            tf.summary.scalar('gumbel_temp', self.tau_ph)
-        else:
-            alpha_gumbel_kl = tf.constant(0., dtype=tf.float32)
-
         # Collect variables to monitor lb
         self.lb_vars = [elbo_tot, elbo_kf, kf_log_probs, elbo_vae, log_px, log_qa]
 
@@ -369,7 +348,7 @@ class KalmanVariationalAutoencoder(object):
                                         summaries=["gradients", "gradient_norm"],
                                         name='kf_updates')
 
-        self.alpha_updates = optimize_loss(loss=-elbo_tot + alpha_gumbel_kl,
+        self.alpha_updates = optimize_loss(loss=-elbo_tot,
                                            global_step=global_step,
                                            learning_rate=learning_rate,
                                            optimizer='Adam',
@@ -378,7 +357,7 @@ class KalmanVariationalAutoencoder(object):
                                            summaries=["gradients", "gradient_norm"],
                                            name='alpha_updates')
 
-        self.all_updates = optimize_loss(loss=-elbo_tot + alpha_gumbel_kl,
+        self.all_updates = optimize_loss(loss=-elbo_tot,
                                          global_step=global_step,
                                          learning_rate=learning_rate,
                                          optimizer='Adam',
@@ -412,9 +391,7 @@ class KalmanVariationalAutoencoder(object):
         :return: imputation error on test set
         """
         sess = self.sess
-
         writer = tf.summary.FileWriter(self.config.log_dir, sess.graph)
-
         num_batches = self.train_data.sequences // self.config.batch_size
         mask_train = np.ones((num_batches, self.config.batch_size, self.train_data.timesteps), dtype=np.float32)
         if self.config.train_miss_prob > 0.0:
@@ -438,8 +415,7 @@ class KalmanVariationalAutoencoder(object):
                              self.kf.u: self.train_data.controls[slc],
                              self.mask: mask_train[i],
                              self.ph_steps: self.train_data.timesteps,
-                             self.scale_reconstruction: self.config.scale_reconstruction,
-                             self.tau_ph: self.tau}
+                             self.scale_reconstruction: self.config.scale_reconstruction}
 
                 # Updates
                 if n < self.config.only_vae_epochs:
@@ -457,10 +433,6 @@ class KalmanVariationalAutoencoder(object):
                 elbo_vae.append(_elbo_vae)
                 log_px.append(_log_px)
                 log_qa.append(_log_qa)
-
-            # Decrease tau for each epoch exponentially
-            self.tau = max(np.multiply(self.tau, np.power(0.95, (n / self.config.gumbel_decay_steps))),
-                           self.config.gumbel_min)
 
             # Write to summary
             summary_train = self.def_summary('train', elbo_tot, elbo_kf, kf_log_probs, elbo_vae, log_px, log_qa)
@@ -509,8 +481,7 @@ class KalmanVariationalAutoencoder(object):
                          self.kf.u: self.test_data.controls[slc],
                          self.mask: mask_test,
                          self.ph_steps: self.test_data.timesteps,
-                         self.scale_reconstruction: 1.0,
-                         self.tau_ph: self.tau}
+                         self.scale_reconstruction: 1.0}
 
             # Bookkeeping.
             _elbo_tot, _elbo_kf, _kf_log_probs, _elbo_vae, _log_px, _log_qa  = self.sess.run(self.lb_vars, feed_dict)
@@ -538,19 +509,16 @@ class KalmanVariationalAutoencoder(object):
         feed_dict = {self.x: self.test_data.images[slc],
                      self.kf.u: self.test_data.controls[slc],
                      self.ph_steps: self.test_data.timesteps,
-                     self.mask: mask_test,
-                     self.tau_ph: self.tau}
+                     self.mask: mask_test}
         smooth_z = self.sess.run(self.model_vars['smooth'], feed_dict)
 
         # Sample deterministic generation
         feed_dict = {self.model_vars['smooth']: smooth_z,
                      self.kf.u: np.zeros((self.config.batch_size, self.n_steps_gen, self.config.dim_u)),
-                     self.ph_steps: self.n_steps_gen,
-                     self.tau_ph: self.tau}
+                     self.ph_steps: self.n_steps_gen}
         a_gen_det, _, alpha_gen_det = self.sess.run(self.out_gen_det, feed_dict)
         x_gen_det = self.sess.run(self.model_vars['x_hat'], {self.model_vars['a_seq']: a_gen_det,
-                                                             self.ph_steps: self.n_steps_gen,
-                                                             self.tau_ph: self.tau})
+                                                             self.ph_steps: self.n_steps_gen})
 
         # Save deterministic a and alpha
         plot_auxiliary([a_gen_det], self.config.log_dir + '/plot_generation_det_%05d.png' % n)
@@ -587,11 +555,10 @@ class KalmanVariationalAutoencoder(object):
 
         # We can only show the image for alpha when using a simple neural network
         if self.config.dim_a == 2 and self.config.fifo_size == 1 and self.config.alpha_rnn == False \
-            and self.config.learn_u == False:
+                and self.config.learn_u == False:
             self.img_alpha_nn(n=n, range_x=(-16, 16), range_y=(-16, 16))
 
     def impute(self, mask_impute, t_init_mask, idx_batch=0, n=99999, plot=True):
-
         slc = slice(idx_batch * self.config.batch_size, (idx_batch + 1) * self.config.batch_size)
         feed_dict = {self.x: self.test_data.images[slc],
                      self.kf.u: self.test_data.controls[slc],
@@ -618,8 +585,7 @@ class KalmanVariationalAutoencoder(object):
                      self.ph_steps: self.test_data.timesteps}
         a_filtered = self.sess.run(self.model_vars['a_mu_pred_seq'], feed_dict)
         x_filtered = self.sess.run(self.model_vars['x_hat'], {self.model_vars['a_seq']: a_filtered,
-                                   self.ph_steps: self.test_data.timesteps})
-
+                                                              self.ph_steps: self.test_data.timesteps})
         if plot:
             str_imputation = "%s" % t_init_mask
             save_frames(x_true, self.config.log_dir + '/video_true.mp4')
