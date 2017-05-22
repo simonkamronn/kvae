@@ -22,7 +22,7 @@ python setup.py develop
 ## Usage Example
 Generate data by modifying and running `kvae/utils/box.py` which will save video sequences to your the `data` folder in your root directory. In the `examples` folder execute the command
 ```
-python boxed_ball.py  --dataset box_rnd
+python boxed_ball.py  --gpu 0
 ```
 to train a model using the default dataset and parameters. To train a model with different parameters run
 ```
