@@ -87,6 +87,7 @@ class KalmanVariationalAutoencoder(object):
         self.n_steps_gen = None
         self.out_gen_det = None
         self.out_gen = None
+        self.out_gen_det_impute = None
         self.train_summary = None
         self.test_summary = None
         self.tau_ph = tf.placeholder_with_default(tf.constant(config.gumbel_min, tf.float32), shape=(), name='tau_ph')
@@ -279,10 +280,8 @@ class KalmanVariationalAutoencoder(object):
         self.n_steps_gen = self.config.n_steps_gen  # We sample for this many iterations,
         self.out_gen_det = self.kf.sample_generative_tf(smooth, self.n_steps_gen, deterministic=True)
         self.out_gen = self.kf.sample_generative_tf(smooth, self.n_steps_gen, deterministic=False)
-        self.out_gen_det_impute = self.kf.sample_generative_tf(smooth, self.n_steps_gen, deterministic=True,
+        self.out_gen_det_impute = self.kf.sample_generative_tf(smooth, self.test_data.timesteps, deterministic=True,
                                                                init_fixed_steps=self.config.t_init_mask)
-        self.out_gen_det_gibbs = self.kf.sample_generative_tf(smooth, self.test_data.timesteps, deterministic=True,
-                                                              init_fixed_steps=self.test_data.timesteps)
         self.out_alpha, _, _, _ = self.alpha(self.a_prev, state=state_init_rnn, u=None, init_buffer=True, reuse=True)
 
         # Collect generated model variables
@@ -653,10 +652,10 @@ class KalmanVariationalAutoencoder(object):
         smooth_z_gen = self.sess.run(self.model_vars['smooth'], feed_dict)
         feed_dict = {self.model_vars['smooth']: smooth_z_gen,
                      self.kf.u: np.zeros((self.config.batch_size, self.n_steps_gen, self.config.dim_u)),
-                     self.ph_steps: self.n_steps_gen}
+                     self.ph_steps: self.test_data.timesteps}
         a_gen_det, _, alpha_gen_det = self.sess.run(self.out_gen_det_impute, feed_dict)
         x_gen_det = self.sess.run(self.model_vars['x_hat'], {self.model_vars['a_seq']: a_gen_det,
-                                                             self.ph_steps: self.n_steps_gen})
+                                                             self.ph_steps: self.test_data.timesteps})
 
         if plot:
             plot_auxiliary([a_reconstr, a_imputed, a_gen_det],
