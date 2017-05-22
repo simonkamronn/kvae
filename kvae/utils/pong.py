@@ -163,6 +163,10 @@ class Pong:
 if __name__ == '__main__':
     os.environ['SDL_VIDEODRIVER'] = 'dummy'
 
+    # Create data dir
+    if not os.path.exists('../../data'):
+        os.makedirs('../../data')
+
     scale = 1
     cannon = Pong(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=3, wall=None)
     cannon.run(delay=None, iterations=20, sequences=5000, radius=3*scale, angle_limits=(0, 360),

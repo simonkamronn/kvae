@@ -139,6 +139,10 @@ if __name__ == '__main__':
     np.random.seed(1234)
     experiment = 'box_planning_thick'
 
+    # Create data dir
+    if not os.path.exists('../../data'):
+        os.makedirs('../../data')
+
     if experiment == 'box_planning_rnd':
 
         cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=10, wall=None)

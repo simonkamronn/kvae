@@ -129,6 +129,10 @@ if __name__ == '__main__':
     scale = 1
     experiment = 'random_wall'
 
+    # Create data dir
+    if not os.path.exists('../../data'):
+        os.makedirs('../../data')
+
     if experiment == 'normal':
         cannon = Cannon(dt=0.2, res=(32*scale, 32*scale), init_pos=(4*scale, 4*scale), wall=None)
         cannon.run(delay=None, iterations=20, sequences=500, radius=4*scale, range_limits=(10*scale, 25*scale),
