@@ -479,7 +479,7 @@ class KalmanVariationalAutoencoder(object):
                 # Impute and calculate error
                 mask_impute = self.mask_impute_planning(t_init_mask=self.config.t_init_mask,
                                                         t_steps_mask=self.config.t_steps_mask)
-                out_res, _ = self.impute(mask_impute, t_init_mask=self.config.t_init_mask, n=n)
+                out_res = self.impute(mask_impute, t_init_mask=self.config.t_init_mask, n=n)
 
                 # Generate sequnces for evaluation
                 self.generate(n=n)
