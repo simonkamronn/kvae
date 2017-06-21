@@ -106,7 +106,6 @@ if __name__ == '__main__':
     os.environ['SDL_VIDEODRIVER'] = 'dummy'
 
     scale = 1
-    experiment = 'box_rnd'
 
     np.random.seed(1234)
 
@@ -114,39 +113,14 @@ if __name__ == '__main__':
     if not os.path.exists('../../data'):
         os.makedirs('../../data')
 
-    if experiment == 'box':
-        cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), wall=None)
-        cannon.run(delay=None, iterations=20, sequences=5000, radius=3*scale, angle_limits=(0, 360),
-                   velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/box.npz', save='npz')
-    if experiment == 'box_rnd':
-        cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=10*scale, wall=None)
-        cannon.run(delay=None, iterations=20, sequences=5000, radius=3*scale, angle_limits=(0, 360),
-                   velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/box_rnd.npz', save='npz')
+    print("Generating training sequences")
+    cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=10*scale, wall=None)
+    cannon.run(delay=None, iterations=20, sequences=5000, radius=3*scale, angle_limits=(0, 360),
+               velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/box_rnd.npz', save='npz')
 
-        np.random.seed(5678)
-        cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=10*scale, wall=None)
-        cannon.run(delay=None, iterations=20, sequences=1000, radius=3*scale, angle_limits=(0, 360),
-                   velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/box_rnd_test.npz', save='npz')
-    if experiment == 'box_rnd_vel':
-        cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=6, wall=None)
-        cannon.run(delay=None, iterations=20, sequences=5000, radius=3*scale, angle_limits=(0, 360),
-                   velocity_limits=(5.0*scale, 15.0*scale), filepath='../../data/box_rnd_vel.npz', save='npz')
-    elif experiment == 'box30':
-        cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), wall=None)
-        cannon.run(delay=None, iterations=30, sequences=5000, radius=3*scale, angle_limits=(0, 360),
-                   velocity_limits=(15.0*scale, 15.0*scale), filepath='../../data/box30.npz', save='npz')
-    elif experiment == 'box40':
-        cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), wall=None)
-        cannon.run(delay=None, iterations=40, sequences=5000, radius=3*scale, angle_limits=(0, 360),
-                   velocity_limits=(15.0*scale, 15.0*scale), filepath='../../data/box40.npz', save='npz')
-    if experiment == 'box_gravity':
-        cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=8, wall=None,
-                         gravity=(0.0, -5.0))
-        cannon.run(delay=None, iterations=20, sequences=5000, radius=3*scale, angle_limits=(0, 360),
-                   velocity_limits=(5.0*scale, 10.0*scale), filepath='../../data/box_gravity.npz', save='npz')
+    print("Generating test sequences")
+    np.random.seed(5678)
+    cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=10*scale, wall=None)
+    cannon.run(delay=None, iterations=20, sequences=1000, radius=3*scale, angle_limits=(0, 360),
+               velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/box_rnd_test.npz', save='npz')
 
-        np.random.seed(5678)
-        cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=8, wall=None,
-                         gravity=(0.0, -5.0))
-        cannon.run(delay=None, iterations=20, sequences=1000, radius=3*scale, angle_limits=(0, 360),
-                   velocity_limits=(5.0*scale, 10.0*scale), filepath='../../data/box_gravity_test.npz', save='npz')

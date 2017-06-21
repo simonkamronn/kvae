@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 import tensorflow as tf
-from kvae.models import KalmanVariationalAutoencoder
+from kvae import KalmanVariationalAutoencoder
 from kvae.utils import reload_config, get_image_config
 
 import seaborn as sns

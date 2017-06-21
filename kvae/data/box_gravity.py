@@ -5,7 +5,7 @@ import os
 
 
 class BallBox:
-    def __init__(self, dt=0.2, res=(32, 32), init_pos=(3, 3), init_std=0, wall=None):
+    def __init__(self, dt=0.2, res=(32, 32), init_pos=(3, 3), init_std=0, wall=None, gravity=(0.0, 0.0)):
         pygame.init()
 
         self.dt = dt
@@ -16,7 +16,7 @@ class BallBox:
             pygame.draw.rect(self.screen, (0, 0, 0), (0, 0, res[0], res[1]), 0)
         else:
             self.screen = pygame.display.set_mode(res, 0, 24)
-        self.gravity = (0.0, 0.0)
+        self.gravity = gravity
         self.initial_position = init_pos
         self.initial_std = init_std
         self.space = pymunk.Space()
@@ -54,47 +54,18 @@ class BallBox:
         return ball
 
     def run(self, iterations=20, sequences=500, angle_limits=(0, 360), velocity_limits=(10, 25), radius=3,
-            flip_gravity=None, save=None, filepath='../../data/balls.npz', delay=None, shape=1):
+            flip_gravity=None, save=None, filepath='../../data/balls.npz', delay=None):
         if save:
             images = np.empty((sequences, iterations, self.res[0], self.res[1]), dtype=np.float32)
             state = np.empty((sequences, iterations, 4), dtype=np.float32)
 
         dd = self.dd
-
-        if shape==1:
-            points = [(1, 8),
-                      (1, 22),
-                      (8, 30),
-                      (22, 30),
-                      (30, 22),
-                      (30, 8),
-                      (22, 1),
-                      (8, 1),
-                      (1, 8)]
-        elif shape==2:
-            points = [(3, 1),
-                      (1, 15),
-                      (8, 30),
-                      (25, 30),
-                      (30, 8),
-                      (15, 1),
-                      (3, 1)]
-
-        # points = [[(1, 1), (1,31)],
-        #           [(1, 1), (31, 1)],
-        #           [(31, 31), (1, 31)],
-        #           [(31, 31), (31, 1)],
-        #           ]
-        self.static_lines = []
-        for i in range(len(points)-1):
-
-            self.static_lines.append(pymunk.Segment(self.space.static_body, points[i], points[i+1], 0.0))
-        # self.static_lines = [pymunk.Segment(self.space.static_body, (dd, dd), (dd, self.res[1]-dd), 0.0),
-        #                      pymunk.Segment(self.space.static_body, (dd, dd), (self.res[0]-dd, dd), 0.0),
-        #                      pymunk.Segment(self.space.static_body, (self.res[0] - dd, self.res[1] - dd),
-        #                                     (dd, self.res[1]-dd), 0.0),
-        #                      pymunk.Segment(self.space.static_body, (self.res[0] - dd, self.res[1] - dd),
-        #                                     (self.res[0]-dd, dd), 0.0)]
+        self.static_lines = [pymunk.Segment(self.space.static_body, (dd, dd), (dd, self.res[1]-dd), 0.0),
+                             pymunk.Segment(self.space.static_body, (dd, dd), (self.res[0]-dd, dd), 0.0),
+                             pymunk.Segment(self.space.static_body, (self.res[0] - dd, self.res[1] - dd),
+                                            (dd, self.res[1]-dd), 0.0),
+                             pymunk.Segment(self.space.static_body, (self.res[0] - dd, self.res[1] - dd),
+                                            (self.res[0]-dd, dd), 0.0)]
         for line in self.static_lines:
             line.elasticity = 1.0
             line.color = pygame.color.THECOLORS["white"]
@@ -135,7 +106,6 @@ if __name__ == '__main__':
     os.environ['SDL_VIDEODRIVER'] = 'dummy'
 
     scale = 1
-    experiment = 'box_shape2'
 
     np.random.seed(1234)
 
@@ -143,22 +113,13 @@ if __name__ == '__main__':
     if not os.path.exists('../../data'):
         os.makedirs('../../data')
 
-    if experiment == 'box_shape1':
-        cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=5, wall=None)
-        cannon.run(delay=None, iterations=20, sequences=5000, radius=3*scale, angle_limits=(0, 360), shape=1,
-                   velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/box_shape1.npz', save='npz')
+    cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=8, wall=None,
+                     gravity=(0.0, -5.0))
+    cannon.run(delay=None, iterations=20, sequences=5000, radius=3*scale, angle_limits=(0, 360),
+               velocity_limits=(5.0*scale, 10.0*scale), filepath='../../data/box_gravity.npz', save='npz')
 
-        np.random.seed(5678)
-        cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=5, wall=None)
-        cannon.run(delay=None, iterations=20, sequences=1000, radius=3*scale, angle_limits=(0, 360), shape=1,
-                   velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/box_shape1_test.npz', save='npz')
-
-    if experiment == 'box_shape2':
-        cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=2.5, wall=None)
-        cannon.run(delay=None, iterations=20, sequences=5000, radius=3*scale, angle_limits=(0, 360), shape=2,
-                   velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/box_shape2.npz', save='npz')
-
-        np.random.seed(5678)
-        cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=2.5, wall=None)
-        cannon.run(delay=None, iterations=20, sequences=1000, radius=3*scale, angle_limits=(0, 360), shape=2,
-                   velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/box_shape2_test.npz', save='npz')
+    np.random.seed(5678)
+    cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=8, wall=None,
+                     gravity=(0.0, -5.0))
+    cannon.run(delay=None, iterations=20, sequences=1000, radius=3*scale, angle_limits=(0, 360),
+               velocity_limits=(5.0*scale, 10.0*scale), filepath='../../data/box_gravity_test.npz', save='npz')
