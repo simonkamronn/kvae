@@ -11,9 +11,6 @@ requirements = [
     'seaborn',
     'numpy',
     'pandas',
-    'tensorflow >= 1.1.0',
-    'pymunk',
-    'pygame',
 ]
 
 setup(

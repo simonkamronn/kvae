@@ -6,23 +6,34 @@ This repository contains the code for Kalman Variational Auto-Encoders introduce
 <div style="text-align:center"><img src="assets/kvae_figure.png" width="300"></div>
 
 ## Installation instructions
-To use the code it is assumed the Kalman Variational Auto-Encoder (KVAE) package is installed
+The Kalman Variational Auto-Encoder (KVAE) package can be installed running
 ```
-# Install as package
-python setup.py install
+# Install requirements
+pip install tensorflow-gpu numpy pandas matplotlib seaborn
 
-# Install in development mode
-python setup.py develop
+# Clone the kvae repository and install it
+git clone https://github.com/simonkamronn/kvae
+cd kvae
+pip install -e .
 ```
 
 ### Dependencies
 - Python >= 2.7 or 3.5
 - Tensorflow >= 1.1
 
-## Usage Example
-Generate data by modifying and running `kvae/utils/box.py` which will save video sequences to your the `data` folder in your root directory. In the `examples` folder execute the command
+## Data generation
+The bouncing ball data is generated running `kvae/utils/box.py`, which will save video sequences to the `data` folder in your root directory.
+This code depends on pygame and the pymunk physics engine
 ```
-python boxed_ball.py  --gpu 0
+pip install pygame pymunk
+cd kvae/utils/
+python box.py
+```
+
+## Usage Example
+In the `examples` folder execute the command
+```
+python boxed_ball.py  --gpu=0
 ```
 to train a model using the default dataset and parameters. To train a model with different parameters run
 ```
