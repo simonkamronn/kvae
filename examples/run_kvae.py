@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 import tensorflow as tf
-from kvae import KalmanVariationalAutoencoder
+from kvae.KalmanVariationalAutoencoder import KalmanVariationalAutoencoder
 from kvae.utils import reload_config, get_image_config
 
 import seaborn as sns
@@ -40,15 +40,15 @@ def run():
     with tf.Session() as sess:
         model = KalmanVariationalAutoencoder(config, sess)
 
-        # # Plots only, remember to load a pretrained model setting reload_model
-        # # to e.g. logdir/20170322110525/model.ckpt
-        # model.build_model().initialize_variables().impute()
-        # model.generate()
-
         model.build_model().build_loss().initialize_variables()
         err = model.train()
         model.imputation_plot('missing_planning')
         model.imputation_plot('missing_random')
+
+        # # Plots only, remember to load a pretrained model setting reload_model
+        # # to e.g. logdir/20170322110525/model.ckpt
+        # model.build_model().initialize_variables().impute()
+        # model.generate()
 
         return err
 
