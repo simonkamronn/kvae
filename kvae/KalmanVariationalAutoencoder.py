@@ -230,7 +230,7 @@ class KalmanVariationalAutoencoder(object):
         dummy_lstm = BasicLSTMCell(self.config.alpha_units * 2 if self.config.learn_u else self.config.alpha_units)
         state_init_rnn = dummy_lstm.zero_state(self.config.batch_size, tf.float32)
 
-        # Initialize Kalman filter
+        # Initialize Kalman filter (LGSSM)
         self.kf = KalmanFilter(dim_z=self.config.dim_z,
                                dim_y=self.config.dim_a,
                                dim_u=self.config.dim_u,
@@ -296,7 +296,7 @@ class KalmanVariationalAutoencoder(object):
                                                   tf.reshape(self.model_vars['a_vae'], (-1, self.config.dim_a)),
                                                   mask_flat,
                                                   self.config)
-        # KF loss
+        # LGSSM loss
         elbo_kf, kf_log_probs, z_smooth = self.kf.get_elbo(self.model_vars['smooth'],
                                                            self.model_vars['A'],
                                                            self.model_vars['B'],

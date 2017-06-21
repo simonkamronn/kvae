@@ -5,67 +5,11 @@ import numpy as np
 
 class KalmanFilter(object):
     """
-    Attributes
-    ----------
-    mu : numpy.array(dim_z, 1)
-        State estimate vector
-
-    P : numpy.array(dim_z, dim_z)
-        Covariance matrix
-
-    R : numpy.array(dim_y, dim_y)
-        Measurement noise matrix
-
-    Q : numpy.array(dim_z, dim_z)
-        Process noise matrix
-
-    F : numpy.array()
-        State Transition matrix
-
-    H : numpy.array(dim_z, dim_z)
-        Measurement function
-
-
-    You may read the following attributes.
-
-    Attributes
-    ----------
-    y : numpy.array
-        Residual of the update step.
-
-    K : numpy.array(dim_z, dim_y)
-        Kalman gain of the update step
-
-    S :  numpy.array
-        Systen uncertaintly projected to measurement space
-
-    log_likelihood : scalar
-        Log likelihood of last measurement update.
+    This class defines a Kalman Filter (Linear Gaussian State Space model), possibly with a dynamics parameter
+    network alpha.
     """
 
     def __init__(self, dim_z, dim_y, dim_u=0, dim_k=1, **kwargs):
-        """ Create a Kalman filter. You are responsible for setting the
-        various state variables to reasonable values; the defaults below will
-        not give you a functional filter.
-
-        Parameters
-        ----------
-        dim_z : int
-            Number of state variables for the Kalman filter. For example, if
-            you are tracking the position and velocity of an object in two
-            dimensions, dim_z would be 4.
-            This is used to set the default size of Sigma, Q, and u
-        dim_y : int
-            Number of of measurement inputs. For example, if the sensor
-            provides you with position in (x,y), dim_y would be 2.
-        dim_u : int (optional)
-            size of the control input, if it is being used.
-            Default value of 0 indicates it is not used.
-        """
-
-        assert dim_z > 0
-        assert dim_y > 0
-        assert dim_u >= 0
 
         self.dim_z = dim_z
         self.dim_y = dim_y
@@ -82,7 +26,6 @@ class KalmanFilter(object):
         init = kwargs.pop('Sigma', self.eye_init((dim_z, dim_z))).astype(np.float32)
         self.Sigma = tf.get_variable('Sigma', initializer=init, trainable=False)  # uncertainty covariance
 
-        # TODO: better to use trainable=False?
         init = kwargs.pop('y_0', np.zeros((dim_y,))).astype(np.float32)
         self.y_0 = tf.get_variable('y_0', initializer=init)  # initial output
 
@@ -126,7 +69,7 @@ class KalmanFilter(object):
 
     def forward_step_fn(self, params, inputs):
         """
-        Forward step over a batch
+        Forward step over a batch, to be used in tf.scan
         :param params:
         :param inputs: (batch_size, variable dimensions)
         :return:
@@ -171,14 +114,18 @@ class KalmanFilter(object):
         B.set_shape([A.get_shape()[0], self.dim_z, self.dim_u])
 
         # Prediction
-        # mu_pred = tf.transpose(tf.matmul(A, tf.transpose(mu_t)) + tf.matmul(self.B, u))
-        # Sigma_pred = tf.scalar_mul(self._alpha_sq, self._asat(A, Sigma_t) + self.Q)
         mu_pred = tf.squeeze(tf.matmul(A, tf.expand_dims(mu_t, 2))) + tf.squeeze(tf.matmul(B, tf.expand_dims(u, 2)))
         Sigma_pred = tf.scalar_mul(self._alpha_sq, tf.matmul(tf.matmul(A, Sigma_t), A, transpose_b=True) + self.Q)
 
         return mu_pred, Sigma_pred, mu_t, Sigma_t, alpha, u, state, buffer, A, B, C
 
     def backward_step_fn(self, params, inputs):
+        """
+        Backwards step over a batch, to be used in tf.scan
+        :param params:
+        :param inputs: (batch_size, variable dimensions)
+        :return:
+        """
         mu_back, Sigma_back = params
         mu_pred_tp1, Sigma_pred_tp1, mu_filt_t, Sigma_filt_t, A = inputs
 
@@ -194,7 +141,12 @@ class KalmanFilter(object):
         return mu_back, Sigma_back
 
     def compute_forwards(self, reuse=None):
-        """Compute the forward step in the Kalman filter."""
+        """Compute the forward step in the Kalman filter.
+           The forward pass is intialized with p(z_1)=N(self.mu, self.Sigma).
+           We then return the mean and covariances of the predictive distribution p(z_t|z_tm1,u_t), t=2,..T+1
+           and the filtering distribution p(z_t|x_1:t,u_1:t), t=1,..T
+           We follow the notation of Murphy's book, section 18.3.1
+        """
 
         # To make sure we are not accidentally using the real outputs in the steps with missing values, set them to 0.
         y_masked = tf.multiply(tf.expand_dims(self.mask, 2), self.y)
@@ -218,6 +170,9 @@ class KalmanFilter(object):
         mu_pred, Sigma_pred, mu_filt, Sigma_filt, alpha, u, state, buffer, A, B, C = forward_states
         mu_pred = tf.expand_dims(mu_pred, 3)
         mu_filt = tf.expand_dims(mu_filt, 3)
+        # The tf.scan below that does the smoothing is initialized with the filtering distribution at time T.
+        # following the derivarion in Murphy's book, we then need to discard the last time step of the predictive
+        # (that will then have t=2,..T) and filtering distribution (t=1:T-1)
         states_scan = [mu_pred[:-1, :, :, :],
                        Sigma_pred[:-1, :, :, :],
                        mu_filt[:-1, :, :, :],
@@ -250,6 +205,9 @@ class KalmanFilter(object):
         return backward_states, A, B, C, alpha
 
     def sample_generative_tf(self, backward_states, n_steps, deterministic=True, init_fixed_steps=1):
+        """
+        Get a sample from the generative model
+        """
         # Get states from the Kalman filter to get the initial state
         mu_z, sigma_z = backward_states
         # z = tf.contrib.distributions.MultivariateNormalTriL(mu_z[seq_idx, 0], sigma_z[seq_idx, 0]).sample()
@@ -393,18 +351,6 @@ class KalmanFilter(object):
         backward_states[1] = tf.transpose(backward_states[1], [1, 0, 2, 3])
         return tuple(backward_states), tf.transpose(A, [1, 0, 2, 3]), tf.transpose(B, [1, 0, 2, 3]), \
                tf.transpose(C, [1, 0, 2, 3]), tf.transpose(alpha, [1, 0, 2])
-
-    def _asat(self, a, s):
-        # A x S x A.T
-        dim_1, dim_2 = a.get_shape().as_list()
-        asat = tf.reshape(s, [-1, dim_2])
-        asat = tf.matmul(asat, a, transpose_b=True)
-        asat = tf.reshape(asat, [-1, dim_2, dim_1])
-        asat = tf.transpose(asat, [0, 2, 1])
-        asat = tf.reshape(asat, [-1, dim_2])
-        asat = tf.matmul(asat, a, transpose_b=True)
-        asat = tf.reshape(asat, [-1, dim_1, dim_1])
-        return asat
 
     def _sast(self, a, s):
         _, dim_1, dim_2 = s.get_shape().as_list()
