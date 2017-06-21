@@ -26,6 +26,8 @@ class PymunkData(object):
 
         # Get data dimensions
         self.sequences, self.timesteps, self.d1, self.d2 = self.images.shape
+        # We set controls to zero (we don't use them even if dim_u=1). If they are fixed to one instead (and dim_u=1)
+        #  the B matrix represents a bias.
         self.controls = np.zeros((self.sequences, self.timesteps, config.dim_u), dtype=np.float32)
 
     def shuffle(self, shuffle_images=False):

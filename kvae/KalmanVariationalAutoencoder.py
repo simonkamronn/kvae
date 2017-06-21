@@ -22,7 +22,7 @@ np.random.seed(1337)
 
 
 class KalmanVariationalAutoencoder(object):
-    """Soft switching linear gaussian state space model
+    """Kalman Variational Autoencoder
     """
     def __init__(self, config, sess):
         self.config = config
@@ -30,23 +30,25 @@ class KalmanVariationalAutoencoder(object):
         self.train_data = PymunkData("../data/{}.npz".format(config.dataset), config)
         self.test_data = PymunkData("../data/{}_test.npz".format(config.dataset), config)
 
+        # Frame sizes
         self.d1 = self.train_data.d1
         self.d2 = self.train_data.d2
 
-        # Init variables
+        # Initializers for LGSSM variables
         A = np.array([np.eye(config.dim_z).astype(np.float32) for _ in range(config.K)])
         B = np.array([config.init_kf_matrices * np.random.randn(config.dim_z, config.dim_u).astype(np.float32)
                       for _ in range(config.K)])
         C = np.array([config.init_kf_matrices * np.random.randn(config.dim_a, config.dim_z).astype(np.float32)
                       for _ in range(config.K)])
-
         Q = config.noise_transition * np.eye(config.dim_z, dtype=np.float32)
         R = config.noise_emission * np.eye(config.dim_a, dtype=np.float32)
 
+        # p(z_1)
         mu = np.zeros((self.config.batch_size, config.dim_z), dtype=np.float32)
         Sigma = np.tile(config.init_cov * np.eye(config.dim_z, dtype=np.float32), (self.config.batch_size, 1, 1))
 
-        a_0 = np.zeros((config.dim_a,), dtype=np.float32)  # Initial variable a_0
+        # Initial variable a_0
+        a_0 = np.zeros((config.dim_a,), dtype=np.float32)
 
         # Collect initial variables
         self.init_vars = dict(A=A, B=B, C=C, Q=Q, R=R, mu=mu, Sigma=Sigma, a_0=a_0)
@@ -78,7 +80,7 @@ class KalmanVariationalAutoencoder(object):
         self.saver = None
         self.kf = None
         self.vae_updates = None
-        self.kf_updates = None
+        self.vae_kf_updates = None
         self.all_updates = None
         self.lb_vars = None
         self.model_vars = None
@@ -92,7 +94,7 @@ class KalmanVariationalAutoencoder(object):
 
     def encoder(self, x):
         """ Convolutional variational encoder to encode image into a low-dimensional latent code
-        If config.conv == False, it is a MLP VAE and if config.use_vae == False, it is a normal encoder
+        If config.conv == False it is a MLP VAE. If config.use_vae == False, it is a normal encoder
         :param x: sequence of images
         :return: a, a_mu, a_var
         """
@@ -127,7 +129,7 @@ class KalmanVariationalAutoencoder(object):
 
     def decoder(self, a_seq):
         """ Convolutional variational decoder to decode latent code to image reconstruction
-        If config.conv == False, it is a MLP VAE and if config.use_vae == False, it is a normal decoder
+        If config.conv == False it is a MLP VAE. If config.use_vae == False it is a normal decoder
         :param a_seq: latent code
         :return: x_hat, x_mu, x_var
         """
@@ -159,7 +161,7 @@ class KalmanVariationalAutoencoder(object):
                 x_var = tf.constant(self.config.noise_pixel_var, dtype=tf.float32, shape=())
 
         if self.config.out_distr == 'bernoulli':
-            # TODO: this shows the probabilities, we need to add the actual sampling here!
+            # For bernoulli we show the probabilities
             x_hat = x_mu
         else:
             x_hat = simple_sample(x_mu, x_var)
@@ -224,7 +226,7 @@ class KalmanVariationalAutoencoder(object):
         alpha = self.alpha if self.config.K > 1 else lambda inputs, state, u, reuse, init_buffer: tf.ones(
             [tf.shape(a_seq)[0], self.config.K])
 
-        # Init RNN
+        # Initial state for the alpha RNN
         dummy_lstm = BasicLSTMCell(self.config.alpha_units * 2 if self.config.learn_u else self.config.alpha_units)
         state_init_rnn = dummy_lstm.zero_state(self.config.batch_size, tf.float32)
 
@@ -248,13 +250,13 @@ class KalmanVariationalAutoencoder(object):
                                state=state_init_rnn
                                )
 
-        # Get state calculation
+        # Get smoothed posterior over z
         smooth, A, B, C, alpha_plot = self.kf.smooth()
 
         # Used only for imputation plots
         filter, _, _, C_filter, _ = self.kf.filter()
 
-        # Get a from the prior z
+        # Get a from the prior z (for plotting)
         a_mu_pred = tf.matmul(C, tf.expand_dims(smooth[0], 2), transpose_b=True)
         a_mu_pred_seq = tf.reshape(a_mu_pred, tf.stack((-1, self.ph_steps, self.config.dim_a)))
         if self.config.sample_z:
@@ -309,16 +311,7 @@ class KalmanVariationalAutoencoder(object):
                                                    self.config.decay_steps * num_batches,
                                                    self.config.decay_rate, staircase=True)
 
-        # KF loss temperature
-        temperature_kf = tf.train.polynomial_decay(self.config.init_temp,
-                                                   global_step,
-                                                   self.config.temp_steps * num_batches,
-                                                   1.0, power=1.0)
-
-        if not self.config.temp_entropy:
-            elbo_tot = self.scale_reconstruction * log_px + temperature_kf * elbo_kf - log_qa
-        else:
-            elbo_tot = self.scale_reconstruction * log_px + elbo_kf - temperature_kf * log_qa
+        elbo_tot = self.scale_reconstruction * log_px + elbo_kf - log_qa
 
         # Collect variables to monitor lb
         self.lb_vars = [elbo_tot, elbo_kf, kf_log_probs, elbo_vae, log_px, log_qa]
@@ -339,23 +332,14 @@ class KalmanVariationalAutoencoder(object):
                                          summaries=["gradients", "gradient_norm"],
                                          name='vae_updates')
 
-        self.kf_updates = optimize_loss(loss=-elbo_tot,
+        self.vae_kf_updates = optimize_loss(loss=-elbo_tot,
                                         global_step=global_step,
                                         learning_rate=learning_rate,
                                         optimizer='Adam',
                                         clip_gradients=self.config.max_grad_norm,
                                         variables=kf_vars + vae_vars,
                                         summaries=["gradients", "gradient_norm"],
-                                        name='kf_updates')
-
-        self.alpha_updates = optimize_loss(loss=-elbo_tot,
-                                           global_step=global_step,
-                                           learning_rate=learning_rate,
-                                           optimizer='Adam',
-                                           clip_gradients=self.config.max_grad_norm,
-                                           variables=alpha_vars,
-                                           summaries=["gradients", "gradient_norm"],
-                                           name='alpha_updates')
+                                        name='vae_kf_updates')
 
         self.all_updates = optimize_loss(loss=-elbo_tot,
                                          global_step=global_step,
@@ -366,8 +350,7 @@ class KalmanVariationalAutoencoder(object):
                                          summaries=["gradients", "gradient_norm"],
                                          name='all_updates')
 
-        tf.summary.scalar('learningrate', learning_rate),
-        tf.summary.scalar('temperature_kf', temperature_kf),
+        tf.summary.scalar('learningrate', learning_rate)
         tf.summary.scalar('mean_var_qa', tf.reduce_mean(self.model_vars['a_var']))
         return self
 
@@ -421,7 +404,7 @@ class KalmanVariationalAutoencoder(object):
                 if n < self.config.only_vae_epochs:
                     sess.run(self.vae_updates, feed_dict)
                 elif n < self.config.only_vae_epochs + self.config.kf_update_steps:
-                    sess.run(self.kf_updates, feed_dict)
+                    sess.run(self.vae_kf_updates, feed_dict)
                 else:
                     sess.run(self.all_updates, feed_dict)
 
@@ -452,7 +435,7 @@ class KalmanVariationalAutoencoder(object):
                                                         t_steps_mask=self.config.t_steps_mask)
                 out_res = self.impute(mask_impute, t_init_mask=self.config.t_init_mask, n=n)
 
-                # Generate sequnces for evaluation
+                # Generate sequences for evaluation
                 self.generate(n=n)
 
                 # Test on previously unseen data
@@ -672,7 +655,7 @@ class KalmanVariationalAutoencoder(object):
         return out_res
 
     def img_alpha_nn(self, range_x=(-30, 30), range_y=(-30, 30), N_points=50, n=99999):
-        """ Visualise the output of the dynamics parameter network alpha over _a_ when dim_a == 2
+        """ Visualise the output of the dynamics parameter network alpha over _a_ when dim_a == 2 and alpha_rnn=False
         
         :param range_x: range of first dimension of a
         :param range_y: range of second dimension of a
