@@ -92,7 +92,7 @@ class BallBox:
                 if save == 'png':
                     pygame.image.save(self.screen, os.path.join(filepath, "bouncing_balls_%02d_%02d.png" % (s, i)))
                 elif save == 'npz':
-                    images[s, i] = pygame.surfarray.array2d(self.screen).swapaxes(1, 0) / (2**24 - 1)
+                    images[s, i] = pygame.surfarray.array2d(self.screen).swapaxes(1, 0).astype(np.float32) / (2**24 - 1)
                     state[s, i] = list(ball.body.position) + list(ball.body.velocity)
 
             # Remove the ball and the wall from the space

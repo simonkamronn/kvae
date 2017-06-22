@@ -145,10 +145,8 @@ def combine_multiple_img(images, table_size=4, indices=None):
 
 
 if __name__ == '__main__':
-    filename = 'box_shape2'
+    filename = 'box'
     npzfile = np.load("../../data/%s.npz" %filename)
     images = npzfile['images']
     save_frames(images, 'training_sequence_%s.mp4' % filename)
-    # save_frames_to_png(images[:30], 'training_sequence_img')
     save_movies_to_frame(images, 'training_sequence_%s' % filename)
-    # save_true_generated_frames(images, images[64:], 'double_vid.mp4')

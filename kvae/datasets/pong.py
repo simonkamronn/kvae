@@ -147,7 +147,7 @@ class Pong:
                 if save == 'png':
                     pygame.image.save(self.screen, os.path.join(filepath, "bouncing_balls_%02d_%02d.png" % (s, i)))
                 elif save == 'npz':
-                    data[s, i] = pygame.surfarray.array2d(self.screen).swapaxes(1, 0) / 255
+                    data[s, i] = pygame.surfarray.array2d(self.screen).swapaxes(1, 0).astype(np.float32) / 255
 
                 # Remove the paddles
                 self.space.remove(paddle1.rect)
