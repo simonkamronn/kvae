@@ -189,7 +189,7 @@ def plot_ball_trajectories_comparison(enc, gen, impute, filename, idx=0, scale=6
         # ax.set_xlim(x_min - 1, x_max + 1)
         # ax.set_ylim(y_min - 1, y_max + 1)
 
-    axes[2].legend(['Encoded', 'Generated', 'Smoothed'], fontsize=30, loc=0)
+    axes[0, 0].legend(['Encoded', 'Generated', 'Smoothed'], fontsize=30, loc=0)
     plt.tight_layout()
     plt.savefig(filename, format='png', bbox_inches='tight', dpi=80)
     plt.close()
