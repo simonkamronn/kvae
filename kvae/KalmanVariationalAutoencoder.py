@@ -274,8 +274,10 @@ class KalmanVariationalAutoencoder(object):
 
         # Compute variables for generation from the model (for plotting)
         self.n_steps_gen = self.config.n_steps_gen  # We sample for this many iterations,
-        self.out_gen_det = self.kf.sample_generative_tf(smooth, self.n_steps_gen, deterministic=True)
-        self.out_gen = self.kf.sample_generative_tf(smooth, self.n_steps_gen, deterministic=False)
+        self.out_gen_det = self.kf.sample_generative_tf(smooth, self.n_steps_gen, deterministic=True,
+                                                        init_fixed_steps=self.config.t_init_mask)
+        self.out_gen = self.kf.sample_generative_tf(smooth, self.n_steps_gen, deterministic=False,
+                                                    init_fixed_steps=self.config.t_init_mask)
         self.out_gen_det_impute = self.kf.sample_generative_tf(smooth, self.test_data.timesteps, deterministic=True,
                                                                init_fixed_steps=self.config.t_init_mask)
         self.out_alpha, _, _, _ = self.alpha(self.a_prev, state=state_init_rnn, u=None, init_buffer=True, reuse=True)
@@ -511,8 +513,8 @@ class KalmanVariationalAutoencoder(object):
         x_gen_det = self.sess.run(self.model_vars['x_hat'], {self.model_vars['a_seq']: a_gen_det,
                                                              self.ph_steps: self.n_steps_gen})
 
-        # Save deterministic a and alpha
-        plot_auxiliary([a_gen_det], self.config.log_dir + '/plot_generation_det_%05d.png' % n)
+        # Save the trajectory of deterministic a (we only plot the first 2 dimensions!) and alpha
+        plot_ball_trajectories(a_gen_det, self.config.log_dir + '/plot_generation_det_%05d.png' % n)
         plot_alpha_grid(alpha_gen_det, self.config.log_dir + '/alpha_generation_det_%05d.png' % n)
 
         # Sample stochastic
@@ -525,24 +527,11 @@ class KalmanVariationalAutoencoder(object):
         save_frames(x_gen_det, self.config.log_dir + '/video_generation_det_%05d.mp4' % n)
 
         # Save stochastic a and alpha
-        plot_auxiliary([a_gen], self.config.log_dir + '/plot_generation_%05d.png' % n)
+        plot_ball_trajectories(a_gen, self.config.log_dir + '/plot_generation_%05d.png' % n)
         plot_alpha_grid(alpha_gen, self.config.log_dir + '/alpha_generation_%05d.png' % n)
-
-        # Save trajectory from a
-        plot_ball_trajectories(a_gen_det, self.config.log_dir + '/plot_generation_balls_%05d.png' % n)
 
         # Save movie to single frame
         save_movies_to_frame(x_gen_det[:, :20], self.config.log_dir + '/video_generation_image_%05d.png' % n)
-
-        # Save true and generated in same movie
-        x_true = self.test_data.images[slc]
-        save_true_generated_frames(x_true, x_gen_det, self.config.log_dir + '/x_true_gen_%05d.mp4' % n)
-
-        # Plot 2D trajectory and corresponding generated video
-        if self.config.dim_a == 2:
-            plot_trajectory_and_video(a_gen_det, x_gen_det, self.config.log_dir + '/a_x_gen_image_%05d.png' % n)
-        elif self.config.dim_a == 3:
-            plot_3d_ball_trajectory(a_gen_det[0], self.config.log_dir + '/a_gen_3d_%05d.png' % n)
 
         # We can only show the image for alpha when using a simple neural network
         if self.config.dim_a == 2 and self.config.fifo_size == 1 and self.config.alpha_rnn == False \
@@ -556,7 +545,7 @@ class KalmanVariationalAutoencoder(object):
                      self.ph_steps: self.test_data.timesteps,
                      self.mask: mask_impute}
 
-        ##### Compute reconstructions and imputations ######
+        ##### Compute reconstructions and imputations (smoothing) ######
         a_imputed, a_reconstr, x_reconstr, alpha_reconstr, smooth_z, filter_z, C_filter = self.sess.run([
                                                                                      self.model_vars['a_mu_pred_seq'],
                                                                                      self.model_vars['a_vae'],
@@ -578,24 +567,19 @@ class KalmanVariationalAutoencoder(object):
         x_filtered = self.sess.run(self.model_vars['x_hat'], {self.model_vars['a_seq']: a_filtered,
                                                               self.ph_steps: self.test_data.timesteps})
         if plot:
-            str_imputation = "%s" % t_init_mask
             save_frames(x_true, self.config.log_dir + '/video_true.mp4')
-            save_frames(x_imputed, self.config.log_dir + '/video_imputation_%05d_%s.mp4' % (n, str_imputation))
+            save_frames(x_imputed, self.config.log_dir + '/video_smoothing_%05d.mp4' % n)
             save_frames(x_reconstr, self.config.log_dir + '/video_reconstruction_%05d.mp4' % n)
-            save_true_generated_frames(x_true, x_imputed, self.config.log_dir + '/x_true_imputed_%05d.mp4' % n)
-            save_true_generated_frames(x_true, x_filtered, self.config.log_dir + '/x_true_filter_%05d.mp4' % n)
+            save_true_generated_frames(x_true, x_imputed, self.config.log_dir + '/video_true_smooth_%05d.mp4' % n)
+            save_true_generated_frames(x_true, x_filtered, self.config.log_dir + '/video_true_filter_%05d.mp4' % n)
+            save_true_generated_frames(x_true, x_reconstr, self.config.log_dir + '/video_true_recon_%05d.mp4' % n)
 
-            plot_auxiliary([a_reconstr, a_imputed, a_filtered],
-                           self.config.log_dir + '/plot_imputation_%05d_%s.png' % (n, str_imputation))
             plot_alpha_grid(alpha_reconstr, self.config.log_dir + '/alpha_reconstr_%05d.png' % n)
 
             # Plot z_mu
             plot_auxiliary([smooth_z[0]], self.config.log_dir + '/plot_z_mu_smooth_%05d.png' % n)
 
             if self.config.dim_a == 2:
-                plot_trajectory_and_video(a_reconstr, x_reconstr, idx=14, cmap='Reds',
-                                          filename=self.config.log_dir + '/a_x_recon_image_%05d.png' % n)
-
                 # Plot alpha and corresponding trajectory
                 plot_ball_and_alpha(alpha_reconstr[14], a_reconstr[14], cmap='Reds',
                                     filename=self.config.log_dir + '/alpha_a_recon_%05d.png' % n)
@@ -615,23 +599,14 @@ class KalmanVariationalAutoencoder(object):
                                                              self.ph_steps: self.test_data.timesteps})
 
         if plot:
-            plot_auxiliary([a_reconstr, a_imputed, a_gen_det],
-                           self.config.log_dir + '/plot_all_%05d_%s.png' % (n, str_imputation))
-            save_true_generated_frames(x_true, x_gen_det,
-                                       self.config.log_dir + '/x_true_gen_init%s_%05d.mp4' % (t_init_mask, n))
-            save_frames(x_gen_det, self.config.log_dir + '/video_generation_init%d_%05d.mp4' % (t_init_mask, n))
+            save_true_generated_frames(x_true, x_gen_det, self.config.log_dir + '/video_true_gen_%05d.mp4' % n)
             if self.config.dim_a == 2:
                 plot_ball_trajectories_comparison(a_reconstr, a_gen_det, a_imputed,
-                                                  self.config.log_dir + '/plot_ball_comparison_%05d_%s.png' % (n, str_imputation),
-                                                  idx=[14, 11, 20],
-                                                  mask=mask_impute)
-
-                plot_ball_trajectory(a_reconstr, self.config.log_dir + '/plot_ball_%05d.png' % n, idx=14, cmap='Reds')
-                np.save(self.config.log_dir + '/plot_ball_%05d.npy' % n, a_reconstr)
-
-            save_movie_to_frame(x_reconstr, self.config.log_dir + '/x_recon_movie_frame_%05d.png' % n,
-                                idx=14, cmap='Reds')
-            plot_alpha(alpha_reconstr, self.config.log_dir + '/alpha_recon_single_%05d.png' % n, 14)
+                                                  self.config.log_dir + '/plot_imputation_%05d.png' % n,
+                                                  nrows=4, ncols=4, mask=mask_impute)
+            else:
+                plot_auxiliary([a_reconstr, a_gen_det, a_imputed],
+                               self.config.log_dir + '/plot_imputation_%05d.png' % n)
 
         # For a more fair comparison against pure generation only look at time steps with no observed variables
         mask_unobs = mask_impute < 0.5
@@ -766,13 +741,11 @@ class KalmanVariationalAutoencoder(object):
         out_res_all = np.array(out_res_all)
         hamm_x_imputed = out_res_all[:, 0]
         hamm_x_filtered = out_res_all[:, 1]
-        hamm_x_gen_det = out_res_all[:, 2]
         baseline = out_res_all[:, 3]
 
         results = [(baseline, 'Baseline'),
                    (hamm_x_imputed, 'KVAE smoothing'),
-                   (hamm_x_filtered, 'KVAE filtering'),
-                   (hamm_x_gen_det, 'KVAE generation')]
+                   (hamm_x_filtered, 'KVAE filtering')]
 
         print(out_res_all)
         import matplotlib as mpl
