@@ -22,11 +22,12 @@ np.random.seed(1337)
 
 
 class KalmanVariationalAutoencoder(object):
-    """Kalman Variational Autoencoder
+    """ This class defines functions to build, train and evaluate Kalman Variational Autoencoders
     """
     def __init__(self, config, sess):
         self.config = config
 
+        # Load the dataset
         self.train_data = PymunkData("../data/{}.npz".format(config.dataset), config)
         self.test_data = PymunkData("../data/{}_test.npz".format(config.dataset), config)
 
@@ -34,12 +35,13 @@ class KalmanVariationalAutoencoder(object):
         self.d1 = self.train_data.d1
         self.d2 = self.train_data.d2
 
-        # Initializers for LGSSM variables
+        # Initializers for LGSSM variables. A is intialized with identity matrices, B and C randomly from a gaussian
         A = np.array([np.eye(config.dim_z).astype(np.float32) for _ in range(config.K)])
         B = np.array([config.init_kf_matrices * np.random.randn(config.dim_z, config.dim_u).astype(np.float32)
                       for _ in range(config.K)])
         C = np.array([config.init_kf_matrices * np.random.randn(config.dim_a, config.dim_z).astype(np.float32)
                       for _ in range(config.K)])
+        # We use isotropic covariance matrices
         Q = config.noise_transition * np.eye(config.dim_z, dtype=np.float32)
         R = config.noise_emission * np.eye(config.dim_a, dtype=np.float32)
 
@@ -158,6 +160,9 @@ class KalmanVariationalAutoencoder(object):
 
                 x_mu = slim.fully_connected(dec_hidden, self.d1 * self.d2, activation_fn=activation_x_mu)
                 x_mu = tf.reshape(x_mu, (-1, self.d1, self.d2, 1))
+                # x_var is not used for bernoulli outputs. Here we fix the output variance of the Gaussian,
+                # we could also learn it globally for each pixel (as we did in the pendulum experiment) or through a
+                # neural network.
                 x_var = tf.constant(self.config.noise_pixel_var, dtype=tf.float32, shape=())
 
         if self.config.out_distr == 'bernoulli':
@@ -169,12 +174,14 @@ class KalmanVariationalAutoencoder(object):
         return tf.reshape(x_hat, tf.stack((-1, self.ph_steps, self.d1, self.d2))), x_mu, x_var
 
     def alpha(self, inputs, state=None, u=None, buffer=None, reuse=None, init_buffer=False, name='alpha'):
-        """The dynamics parameter network alpha for mixing transitions in a state space model
+        """The dynamics parameter network alpha for mixing transitions in a state space model.
+        This function is quite general and supports different architectures (NN, RNN, FIFO queue, learning the inputs)
 
         Args:
             inputs: tensor to condition mixing vector on
             state: previous state if using RNN network to model alpha
-            u: pass-through variable if u is given
+            u: pass-through variable if u is given (learn_u=False)
+            buffer: buffer for the FIFO network (used for fifo_size>1)
             reuse: `True` or `None`; if `True`, we go into reuse mode for this scope as
                     well as all sub-scopes; if `None`, we just inherit the parent scope reuse.
             init_buffer: initialize buffer for a_t
@@ -186,7 +193,7 @@ class KalmanVariationalAutoencoder(object):
             u: either inferred u from model or pass-through
             buffer: FIFO buffer
         """
-        # Increase the number of hidden units if we also learn u
+        # Increase the number of hidden units if we also learn u (learn_u=True)
         num_units = self.config.alpha_units * 2 if self.config.learn_u else self.config.alpha_units
 
         # Overwrite input buffer
@@ -218,7 +225,7 @@ class KalmanVariationalAutoencoder(object):
         return alpha, state, u, buffer
 
     def build_model(self):
-        # Encode q(a|x)
+        # Encoder q(a|x)
         a_seq, a_mu, a_var = self.encoder(self.x)
         a_vae = a_seq
 
@@ -253,7 +260,7 @@ class KalmanVariationalAutoencoder(object):
         # Get smoothed posterior over z
         smooth, A, B, C, alpha_plot = self.kf.smooth()
 
-        # Used only for imputation plots
+        # Get filtered posterior, used only for imputation plots
         filter, _, _, C_filter, _ = self.kf.filter()
 
         # Get a from the prior z (for plotting)
@@ -262,10 +269,10 @@ class KalmanVariationalAutoencoder(object):
         if self.config.sample_z:
             a_seq = a_mu_pred_seq
 
-        # Decode a
+        # Decoder p(x|a)
         x_hat, x_mu, x_var = self.decoder(a_seq)
 
-        # Compute variables for generation
+        # Compute variables for generation from the model (for plotting)
         self.n_steps_gen = self.config.n_steps_gen  # We sample for this many iterations,
         self.out_gen_det = self.kf.sample_generative_tf(smooth, self.n_steps_gen, deterministic=True)
         self.out_gen = self.kf.sample_generative_tf(smooth, self.n_steps_gen, deterministic=False)
@@ -316,10 +323,9 @@ class KalmanVariationalAutoencoder(object):
         # Collect variables to monitor lb
         self.lb_vars = [elbo_tot, elbo_kf, kf_log_probs, elbo_vae, log_px, log_qa]
 
-        # Get list of vars
+        # Get list of vars for gradient computation
         vae_vars = slim.get_variables('vae')
         kf_vars = [self.kf.A, self.kf.B, self.kf.C, self.kf.y_0]
-        alpha_vars = slim.get_variables('alpha')
         all_vars = tf.trainable_variables()
 
         # Define training updates
@@ -376,6 +382,7 @@ class KalmanVariationalAutoencoder(object):
         sess = self.sess
         writer = tf.summary.FileWriter(self.config.log_dir, sess.graph)
         num_batches = self.train_data.sequences // self.config.batch_size
+        # This code supports training with missing data (if train_miss_prob > 0.0)
         mask_train = np.ones((num_batches, self.config.batch_size, self.train_data.timesteps), dtype=np.float32)
         if self.config.train_miss_prob > 0.0:
             # Always use the same mask for each sequence during training
@@ -400,7 +407,8 @@ class KalmanVariationalAutoencoder(object):
                              self.ph_steps: self.train_data.timesteps,
                              self.scale_reconstruction: self.config.scale_reconstruction}
 
-                # Updates
+                # Support for different updates schemes. It is beneficial to achieve better convergence not to train
+                # alpha from the beginning
                 if n < self.config.only_vae_epochs:
                     sess.run(self.vae_updates, feed_dict)
                 elif n < self.config.only_vae_epochs + self.config.kf_update_steps:
@@ -646,9 +654,10 @@ class KalmanVariationalAutoencoder(object):
         norm_rmse_a_imputed = norm_rmse(a_imputed[mask_unobs], a_reconstr_unobs)
         norm_rmse_a_gen_det = norm_rmse(a_gen_det[mask_unobs], a_reconstr_unobs)
 
-        print("Hamming distance. x_imputed: %.5f, x_filtered: %.5f, x_gen_det: %.5f, baseline: %.5f. " % (
-            ham_unobs['smooth'], ham_unobs['filt'], ham_unobs['gen'], hamming_baseline))
-        print("Normalized RMSE. a_imputed: %.3f, a_gen_det: %.3f" % (norm_rmse_a_imputed, norm_rmse_a_gen_det))
+        if plot:
+            print("Hamming distance. x_imputed: %.5f, x_filtered: %.5f, x_gen_det: %.5f, baseline: %.5f. " % (
+                ham_unobs['smooth'], ham_unobs['filt'], ham_unobs['gen'], hamming_baseline))
+            print("Normalized RMSE. a_imputed: %.3f, a_gen_det: %.3f" % (norm_rmse_a_imputed, norm_rmse_a_gen_det))
 
         out_res = (ham_unobs['smooth'], ham_unobs['filt'], ham_unobs['gen'],
                    hamming_baseline, norm_rmse_a_imputed, norm_rmse_a_gen_det)

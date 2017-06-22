@@ -15,9 +15,10 @@ np.random.seed(1337)
 def run():
     """Load and train model
 
-    Create a model object and run the training using the provided config. The saving of the config for some reason needs to be done here and not in the model class
+    Create a model object and run the training using the provided config.
     """
     config = get_image_config()
+    # To reload a saved model
     config = reload_config(config.FLAGS)
 
     # Add timestamp to log path

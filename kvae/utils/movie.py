@@ -19,6 +19,7 @@ def save_frames(images, filename):
 
     ani = animation.FuncAnimation(fig, updatefig, interval=500, frames=n_steps)
 
+    # Either avconv or ffmpeg need to be installed in the system to produce the videos!
     try:
         writer = animation.writers['avconv']
     except KeyError:
