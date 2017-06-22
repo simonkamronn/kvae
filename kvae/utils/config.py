@@ -22,7 +22,7 @@ def get_image_config():
     cl = tf.app.flags
 
     # Choose data set
-    cl.DEFINE_string('dataset', 'box_rnd', 'Select data set')
+    cl.DEFINE_string('dataset', 'box', 'Select data set') # 'box_rnd', 'box_gravity', 'polygon' or 'pong'
 
     # VAE config
     cl.DEFINE_string('out_distr', 'bernoulli', 'Output distibution')

@@ -144,9 +144,9 @@ if __name__ == '__main__':
 
     cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=2.5, wall=None)
     cannon.run(delay=None, iterations=20, sequences=5000, radius=3*scale, angle_limits=(0, 360), shape=2,
-               velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/box_shape2.npz', save='npz')
+               velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/polygon.npz', save='npz')
 
     np.random.seed(5678)
     cannon = BallBox(dt=0.2, res=(32*scale, 32*scale), init_pos=(16*scale, 16*scale), init_std=2.5, wall=None)
     cannon.run(delay=None, iterations=20, sequences=1000, radius=3*scale, angle_limits=(0, 360), shape=2,
-               velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/box_shape2_test.npz', save='npz')
+               velocity_limits=(10.0*scale, 15.0*scale), filepath='../../data/polygon_test.npz', save='npz')

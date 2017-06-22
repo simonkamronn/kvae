@@ -22,14 +22,14 @@ pip install -e .
 - Tensorflow >= 1.1
 
 ## Data generation
-The bouncing ball data is generated running `kvae/datasets/box.py`, which will save video sequences to the `data` 
-folder in your root directory.
-This code depends on pygame and the pymunk physics engine
+The bouncing ball data is generated running `kvae/datasets/box.py`, which will save video sequences to the `data` folder in your root directory.
+This code depends on pygame and the pymunk physics engine.
 ```
 pip install pygame pymunk
 cd kvae/datasets/
 python box.py
 ```
+In the same folder you can find code to generate the data for the other environments (gravity, polygon and pong) presented in section 5.3 in the paper.
 
 ## Usage Example
 In the `examples` folder execute the command
