@@ -67,9 +67,6 @@ target/
 /.editorconfig
 data/
 examples/logs/
-examples/pinwheel_vae.py
 kvae/utils/training_sequence.mp4
 
 notebooks/
-
-examples/results_files/
