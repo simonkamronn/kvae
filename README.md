@@ -1,8 +1,8 @@
 # Kalman Variational Auto-Encoder
 This repository contains the code for the model introduced in the paper
-> A Disentangled Recognition and Nonlinear Dynamics Model for Unsupervised Learning.
-> Marco Fraccaro*, Simon Kamronn*, Ulrich Paquet, Ole Winther
-> Arxiv...
+> A Disentangled Recognition and Nonlinear Dynamics Model for Unsupervised Learning.  
+> Marco Fraccaro*, Simon Kamronn*, Ulrich Paquet, Ole Winther  
+> Arxiv...  
 > <sub>* Equal contribution.</sub>
 
 The Kalman variational auto-encoder is a framework for unsupervised learning of sequential data that disentangles two latent representations: an object’s representation, coming from a recognition model, and a latent state describing its dynamics. The recognition model is represented by a convolutional variational auto-encoder and the latent dynamics model as a linear Gaussian state space model (LGSSM).
@@ -33,7 +33,7 @@ pip install -e .
 - Tensorflow >= 1.1
 
 ### Data
-The data used in the experiments is available for download here: [link](https://drive.google.com/drive/folders/0B7BmG5ubHI3UeDNLbVVXWDRVUnM?usp=sharing). Once downloaded, it needs to be placed in the `data` folder in the root directory.
+The data used in the experiments is available for download here: [link](https://drive.google.com/drive/folders/0B7BmG5ubHI3UeDNLbVVXWDRVUnM?usp=sharing). Once downloaded, it needs to be placed in the `data` folder in the root directory.  
 The scripts we used to generate the video sequences can be found in `kvae/datasets`, and depend on pygame and the pymunk physics engine (and their dependencies).
 
 ## Usage Example
