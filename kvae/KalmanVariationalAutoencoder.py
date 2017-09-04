@@ -200,6 +200,10 @@ class KalmanVariationalAutoencoder(object):
         if init_buffer:
             buffer = tf.zeros((tf.shape(inputs)[0], self.config.dim_a, self.config.fifo_size), dtype=tf.float32)
 
+        # If K == 1, return inputs
+        if self.config.K == 1:
+            return tf.ones([self.config.batch_size, self.config.K]), state, u, buffer
+
         with tf.variable_scope(name, reuse=reuse):
             if self.config.alpha_rnn:
                 rnn_cell = BasicLSTMCell(num_units, reuse=reuse)
@@ -229,10 +233,6 @@ class KalmanVariationalAutoencoder(object):
         a_seq, a_mu, a_var = self.encoder(self.x)
         a_vae = a_seq
 
-        # If K == 1 simplify the graph
-        alpha = self.alpha if self.config.K > 1 else lambda inputs, state, u, reuse, init_buffer: tf.ones(
-            [tf.shape(a_seq)[0], self.config.K])
-
         # Initial state for the alpha RNN
         dummy_lstm = BasicLSTMCell(self.config.alpha_units * 2 if self.config.learn_u else self.config.alpha_units)
         state_init_rnn = dummy_lstm.zero_state(self.config.batch_size, tf.float32)
@@ -253,7 +253,7 @@ class KalmanVariationalAutoencoder(object):
                                mu=self.init_vars['mu'],
                                Sigma=self.init_vars['Sigma'],
                                y_0=self.init_vars['a_0'],
-                               alpha=alpha,
+                               alpha=self.alpha,
                                state=state_init_rnn
                                )
 
@@ -311,7 +311,7 @@ class KalmanVariationalAutoencoder(object):
                                                            self.model_vars['B'],
                                                            self.model_vars['C'])
 
-        # Calc num_batches
+        # Calc number of batches
         num_batches = self.train_data.sequences // self.config.batch_size
 
         # Decreasing learning rate
@@ -320,6 +320,7 @@ class KalmanVariationalAutoencoder(object):
                                                    self.config.decay_steps * num_batches,
                                                    self.config.decay_rate, staircase=True)
 
+        # Combine individual ELBO's
         elbo_tot = self.scale_reconstruction * log_px + elbo_kf - log_qa
 
         # Collect variables to monitor lb
