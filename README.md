@@ -33,8 +33,15 @@ pip install -e .
 - Tensorflow >= 1.1
 
 ### Data
-The data used in the experiments is available for download here: [link](https://drive.google.com/drive/folders/0B7BmG5ubHI3UeDNLbVVXWDRVUnM?usp=sharing). Once downloaded, it needs to be placed in the `data` folder in the root directory.  
+The data used in the experiments is available for download here: [link](https://archive.compute.dtu.dk/files/public/users/marco/kvae). Once downloaded, it needs to be placed in the `data` folder in the root directory.
+In Linux you can download the data by running from the root directory:
+```
+wget https://archive.compute.dtu.dk/archives/public/users/marco/kvae/data.zip
+unzip data.zip
+```
+Alternatively, you can also find the data here: [link](https://drive.google.com/drive/folders/0B7BmG5ubHI3UeDNLbVVXWDRVUnM?usp=sharing)
 The scripts we used to generate the video sequences can be found in `kvae/datasets`, and depend on pygame and the pymunk physics engine (and their dependencies).
+
 
 ## Usage Example
 In the `examples` folder execute the command
