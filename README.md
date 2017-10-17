@@ -2,7 +2,7 @@
 This repository contains the code for the model introduced in the paper
 > A Disentangled Recognition and Nonlinear Dynamics Model for Unsupervised Learning.  
 > Marco Fraccaro*, Simon Kamronn*, Ulrich Paquet, Ole Winther  
-> NIPS 2017  
+> NIPS 2017, [arXiv:1710.05741](https://arxiv.org/abs/1710.05741)  
 > <sub>* Equal contribution.</sub>
 
 The Kalman variational auto-encoder is a framework for unsupervised learning of sequential data that disentangles two latent representations: an object’s representation, coming from a recognition model, and a latent state describing its dynamics. The recognition model is represented by a convolutional variational auto-encoder and the latent dynamics model as a linear Gaussian state space model (LGSSM).
